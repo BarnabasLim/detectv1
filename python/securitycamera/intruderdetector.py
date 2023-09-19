@@ -5,32 +5,42 @@ import cv2
 import logging
 import imutils
 import os
-from securitycamera.firebase import Firebase
+# from securitycamera.firebase import Firebase
 from securitycamera.motiondetector import MotionDetector
-from securitycamera.tensorflowdetector import TensorflowDetector
+# from securitycamera.tensorflowdetector import TensorflowDetector
+from securitycamera.yolov8 import YoloDetector
 from securitycamera.tracking import Tracker
 from securitycamera.slack import Slack
+from securitycamera.telegram import TelegramBot
 
 logger = logging.getLogger('security_camera')
 class IntruderDetector(object):
 
 
-    def __init__(self, slackConfigPath, firebaseCredentialsPath, debug=False):
+    def __init__(self, slackConfigPath, 
+                 telegramCredentialsConfigPath,
+                #  firebaseCredentialsPath, 
+                 debug=False):
         self.motionDetector = MotionDetector()
-        self.detector = TensorflowDetector()
+        # self.detector = TensorflowDetector()
+        self.yolodetector=YoloDetector()
         self.debug = debug
 
         logger.info("Slack config path: {}".format(slackConfigPath))
-        self.slack = Slack(slackConfigPath)
+        self.slack = Slack(slackConfigPath, 
+                 logger)
+        logger.info("Telegram config path: {}".format(telegramCredentialsConfigPath))
+        self.telegramBot=TelegramBot(telegramCredentialsConfigPath, 
+                 logger)
 
-        logger.info("Firebase credentials  path: {}".format(firebaseCredentialsPath))
+        # logger.info("Firebase credentials  path: {}".format(firebaseCredentialsPath))
 
-        if (firebaseCredentialsPath and os.path.isfile(firebaseCredentialsPath)):
-            # setting up firebase admin config to push training files
-            logger.info("Setting up firebase admin config to push detection images with %s" % firebaseCredentialsPath)
-            self.firebase = Firebase(firebaseCredentialsPath)
-        else:
-            logger.info("No firebase credentatials file provided. No images will be uploaded to the cloud.")
+        # if (firebaseCredentialsPath and os.path.isfile(firebaseCredentialsPath)):
+        #     # setting up firebase admin config to push training files
+        #     logger.info("Setting up firebase admin config to push detection images with %s" % firebaseCredentialsPath)
+        #     self.firebase = Firebase(firebaseCredentialsPath)
+        # else:
+        #     logger.info("No firebase credentatials file provided. No images will be uploaded to the cloud.")
 
     # blocks until it finds the next video to analyse
 
@@ -57,7 +67,9 @@ class IntruderDetector(object):
                             obj.objectID, limitY, (cx, cy)))
                         # here we can send a slack notification and break the while loop
                         return True
+        
         return False
+        # return True
 
     def preprocess(self, frame):
         # resize
@@ -98,8 +110,11 @@ class IntruderDetector(object):
             currentFrame = cap.get(cv2.CAP_PROP_POS_FRAMES)
             ret = cap.grab()
             logger.debug("Processing frame number {} out of {} frames".format(currentFrame, totalFrameCount))
+            logger.info("Processing frame number {} out of {} frames".format(currentFrame, totalFrameCount))
             # update our frame counter
-
+            if(currentFrame==totalFrameCount):
+                logger.info("BOOOOOOYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA {} {}".format(currentFrame, totalFrameCount))
+            
             if (not ret):
                 logger.debug("Attempting to stop stream")
                 cap.release()
@@ -121,19 +136,22 @@ class IntruderDetector(object):
                     logger.debug("bounding boxes for motion detector {}".format(boundingBoxesMotion))
                     # self.drawBoundingBoxes(resizedFrameColor, boundingBoxesMotion, (0, 255, 0))
                 if self.isInRestrictedArea(resizedFrameColor):
-                    (_, _, boundingBoxesDetector) = self.detector.detectPerson(resizedFrameColor)
-                    if boundingBoxesDetector:
-                        logger.debug("bounding boxes for motion detector {}".format(boundingBoxesMotion))
-                    cv2.line(resizedFrameColor, (0, H), (W, int(H * 2 / 3)), (255, 0, 0), 5)
-                    self.drawBoundingBoxes(resizedFrameColor, boundingBoxesMotion, (0, 255, 0))
-                    self.drawBoundingBoxes(resizedFrameColor, boundingBoxesDetector, (255, 0, 0))
-
+                    (resizedFrameColor,detected_item)=self.yolodetector.detectPerson(resizedFrameColor)
+                    print(detected_item)
+                    # (_, _, boundingBoxesDetector) = self.detector.detectPerson(resizedFrameColor)
+                    # if boundingBoxesDetector:
+                        # logger.debug("bounding boxes for motion detector {}".format(boundingBoxesMotion))
+                    # cv2.line(resizedFrameColor, (0, H), (W, int(H * 2 / 3)), (255, 0, 0), 5)
+                    # self.drawBoundingBoxes(resizedFrameColor, boundingBoxesMotion, (0, 255, 0))
+                    # self.drawBoundingBoxes(resizedFrameColor, boundingBoxesDetector, (255, 0, 0))
+                    
                     self.slack.notifySlack(file, resizedFrameColor, bsFrame)
+                    self.telegramBot.notifyTelegram(file, resizedFrameColor, bsFrame)
                     # for training of model
                     # we upload to firebase if feature enabled
-                    if self.firebase:
-                        self.firebase.uploadImageForTraining(self.generateImageName(file,currentFrame), frame, resizedFrameColor, boundingBoxesMotion)
-                    break;
+                    # if self.firebase:
+                    #     self.firebase.uploadImageForTraining(self.generateImageName(file,currentFrame), frame, resizedFrameColor, boundingBoxesMotion)
+                    # break;
             # update frame count
             # fps.update()
             if self.debug:

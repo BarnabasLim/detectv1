@@ -4,10 +4,11 @@ import argparse
 import time
 import os
 import logging
-from securitycamera.firebase import Firebase
+# from securitycamera.firebase import Firebase
 from securitycamera.slack import Slack
+from securitycamera.telegram import TelegramBot
 from securitycamera.intruderdetector import IntruderDetector
-from securitycamera.training import Training
+# from securitycamera.training import Training
 
 
 def setupLogger():
@@ -35,17 +36,19 @@ logger = setupLogger()
 ap = argparse.ArgumentParser()
 
 
-ap.add_argument("-d", "--directory", type=str, default ="/data/videos/incoming",
+# ap.add_argument("-d", "--directory", type=str, default ="/data/videos/incoming",
+# 	help="path to optional input video directory")
+ap.add_argument("-d", "--directory", type=str, default ="./micamshare",
 	help="path to optional input video directory")
 
 ap.add_argument("-i", "--input", type=str,
 	help="path to optional input video file")
 
-ap.add_argument("-download", "--download-training", type=str,
-	help="download training files")
+# ap.add_argument("-download", "--download-training", type=str,
+# 	help="download training files")
 
-ap.add_argument("-training", "--training", type=str,
-	help="start training")
+# ap.add_argument("-training", "--training", type=str,
+# 	help="start training")
 
 ap.add_argument("-c","--clear-slack-files", action='store_true',
 	help="clears files in slack")
@@ -53,8 +56,11 @@ ap.add_argument("-c","--clear-slack-files", action='store_true',
 ap.add_argument("-slack", "--slack-credentials", type=str, default="config.ini",
 	help="path to optional slack configuration")
 
-ap.add_argument("-firebase", "--firebase-credentials", type=str, default="firebase_credentials.json",
-	help="path to optional slack configuration")
+ap.add_argument("-telegram", "--telegram-credentials", type=str, default="config.ini",
+	help="path to optional telegram configuration")
+
+# ap.add_argument("-firebase", "--firebase-credentials", type=str, default="firebase_credentials.json",
+# 	help="path to optional slack configuration")
 
 ap.add_argument("-credentials", "--credentials-path", type=str, default="./credentials",
 	help="path to optional folder for credentials")
@@ -76,8 +82,11 @@ def wait_for_video(directory, time_limit=3600, check_interval=60):
 
     while time.time() <= last_time:
         logger.info("Searching for new camera uploads")
+        print("check directory", directory)
         for root, dirs, files in os.walk(directory):
+            
             files = [fi for fi in files if fi.endswith(".mp4") and not fi.startswith(".")]
+            print("check files detected", files)
             for file in files:
                 filePath = os.path.join(root, file)
 
@@ -105,8 +114,14 @@ def isValidVideoFile(file):
 def moveVideoToArchive(file):
     open(file + '.processed', 'w').close()
 
-def wait_for_videos(slackCredentialsConfigPath, firebaseCredentialsPath, videosFolder):
-    intruderDetector = IntruderDetector(slackCredentialsConfigPath, firebaseCredentialsPath)
+def wait_for_videos(slackCredentialsConfigPath,
+                    telegramCredentualsConfigPath, 
+                    # firebaseCredentialsPath, 
+                    videosFolder):
+    intruderDetector = IntruderDetector(slackCredentialsConfigPath,
+                                        telegramCredentualsConfigPath 
+                                        # firebaseCredentialsPath
+                                        )
     while True:
         try:
             file = wait_for_video(videosFolder, 3600 * 354, 1)
@@ -128,25 +143,33 @@ logger.info("OpenCV version :  {0}".format(cv2.__version__))
 # folder
 credentialsPath = args.get("credentials_path")
 slackCredentialsConfigPath = "{}/{}".format(credentialsPath, args.get("slack_credentials") )
-firebaseCredentialsPath = "{}/{}".format(credentialsPath, args.get("firebase_credentials") )
+telegramCredentialsConfigPath = "{}/{}".format(credentialsPath, args.get("telegram_credentials") )
+
+# firebaseCredentialsPath = "{}/{}".format(credentialsPath, args.get("firebase_credentials") )
 
 if args.get("clear_slack_files",False):
     slack = Slack(args.get(slackCredentialsConfigPath))
     slack.clearFiles()
-elif args.get("training", False):
-    trainingDir = args.get("training")
-    training = Training(trainingDir)
-    print("Get training")
-elif args.get("download_training", False):
-    destDir = args.get("download_training")
-    firebase = Firebase(firebaseCredentialsPath)
-    firebase.downloadImagesForTraining( destDir)
-    print("Download training")
+# elif args.get("training", False):
+#     trainingDir = args.get("training")
+#     training = Training(trainingDir)
+#     print("Get training")
+# elif args.get("download_training", False):
+#     destDir = args.get("download_training")
+    # firebase = Firebase(firebaseCredentialsPath)
+    # firebase.downloadImagesForTraining( destDir)
+    # print("Download training")
 elif not args.get("input", False):
     print("checking for new files")
     logger.info("[INFO] Checking for new incoming files")
-    wait_for_videos(slackCredentialsConfigPath,firebaseCredentialsPath, args.get("directory"))
+    wait_for_videos(slackCredentialsConfigPath,
+                    telegramCredentialsConfigPath,
+                    # firebaseCredentialsPath, 
+                    args.get("directory"))
 else:
     file =  args["input"]
-    intruderDetector = IntruderDetector(slackCredentialsConfigPath,firebaseCredentialsPath, debug=True)
+    intruderDetector = IntruderDetector(slackCredentialsConfigPath,
+                                        telegramCredentialsConfigPath,
+                                        # firebaseCredentialsPath, 
+                                        debug=True)
     intruderDetector.processFile(file)

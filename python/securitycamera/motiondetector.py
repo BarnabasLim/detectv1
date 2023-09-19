@@ -76,7 +76,7 @@ class MotionDetector(object):
     def removeWhiteNoise(self, frame):
         # find contours in the image and initialize the mask that will be
         # used to remove the bad contours
-        (_,cnts,_)= cv2.findContours(frame.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        (cnts,_)= cv2.findContours(frame.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         mask = np.ones(frame.shape[:2], dtype="uint8") * 255
 
         # loop over the contours
@@ -93,8 +93,8 @@ class MotionDetector(object):
         backgroundSubtractionFrame = self.applyBackgroundSubtraction(frameColor)
 
         cnts = cv2.findContours(backgroundSubtractionFrame.copy(), cv2.RETR_EXTERNAL,
-                                cv2.CHAIN_APPROX_SIMPLE)
-        cnts = cnts[0] if imutils.is_cv2() else cnts[1]
+                                cv2.CHAIN_APPROX_SIMPLE)[0]
+        # cnts = cnts[0] if imutils.is_cv2() else cnts[1]
         boxes = []
         # loop over the contours
         for c in cnts:
